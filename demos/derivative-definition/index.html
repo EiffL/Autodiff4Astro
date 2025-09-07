@@ -27,9 +27,11 @@
   html,body{ height:100%; margin:0; background:transparent; color:var(--text); font:21px/1.5 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica, Arial }
     /* Make JSXGraph board background transparent for seamless embedding */
     .jxgbox{ background:transparent !important; }
-    .wrap{ display:flex; flex-direction:column; gap:12px; padding:12px; height:100svh; background:transparent }
-    header{ display:flex; align-items:center; justify-content:space-between; gap:12px }
-  header h1{ font-size:24px; margin:0 }
+  .wrap{ display:flex; flex-direction:column; gap:12px; padding:12px; height:100svh; background:transparent }
+  header{ display:flex; align-items:center; justify-content:space-between; gap:12px }
+  /* Top-left compact control */
+  .top-controls{ display:flex; align-items:center; gap:8px }
+  .top-controls label{ color:var(--muted); font-size:18px }
     header .hint{ color:var(--muted) }
     .board{ flex:1; min-height:280px; border-radius:8px; overflow:hidden; border:none; background:transparent }
     .controls{ display:grid; gap:8px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); align-items:end }
@@ -45,7 +47,16 @@
 <body>
   <div class="wrap">
     <header>
-      <h1>Derivative: secant → tangent</h1>
+      <div class="top-controls">
+        <label for="fn-select">Function f(x)</label>
+        <select id="fn-select">
+          <option value="sin">f(x) = sin(x)</option>
+          <option value="cubic">f(x) = 0.1 x^3 - x</option>
+          <option value="gauss">f(x) = exp(-x^2/2)</option>
+          <option value="abs">f(x) = |x| (kink)</option>
+          <option value="kink">f(x) = |x| + 0.2 x^2 (kink)</option>
+        </select>
+      </div>
       <div class="legend">
         <span class="chip"><span class="dot" style="background:#0099cc"></span> f(x)</span>
   <span class="chip"><span class="dot" style="background:#6841eb"></span> secant slope (Δy/ε)</span>
@@ -56,16 +67,7 @@
     <div id="jxg-board" class="board"></div>
 
     <section class="controls">
-      <div class="control">
-        <label>Function f(x)</label>
-        <select id="fn-select">
-          <option value="sin">f(x) = sin(x)</option>
-          <option value="cubic">f(x) = 0.1 x^3 - x</option>
-          <option value="gauss">f(x) = exp(-x^2/2)</option>
-          <option value="abs">f(x) = |x| (kink)</option>
-          <option value="kink">f(x) = |x| + 0.2 x^2 (kink)</option>
-        </select>
-      </div>
+  <!-- function selector moved to header to free space here -->
       <div class="control">
         <label>Point x (drag the blue point or use slider)</label>
         <input id="x-slider" type="range" min="-3.14" max="3.14" step="0.001" value="0.8" />
