@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Autodiff4Astro • Demos</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <style>
+    :root{ --bg:#0d1117; --fg:#c9d1d9; --muted:#8b949e; --card:#161b22; --accent:#58a6ff; }
+    *{ box-sizing:border-box }
+    html,body{ height:100%; margin:0; background:var(--bg); color:var(--fg); font:16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji" }
+    a{ color:var(--accent); text-decoration:none }
+    a:hover{ text-decoration:underline }
+    header{ padding:24px 16px; text-align:center }
+    .grid{ display:grid; gap:16px; grid-template-columns: repeat(auto-fit,minmax(260px,1fr)); padding:0 16px 32px }
+    .card{ background:var(--card); border:1px solid #30363d; border-radius:12px; padding:16px; box-shadow: 0 1px 0 rgba(1,4,9,0.1); }
+    .card h3{ margin:0 0 8px }
+    .card p{ margin:0; color:var(--muted) }
+    footer{ text-align:center; color:var(--muted); padding:16px }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Autodiff4Astro — Interactive Demos</h1>
+    <p>Self-contained pages designed for iframe embedding in slides.com. Hosted on GitHub Pages.</p>
+  </header>
+
+  <main class="grid">
+    <a class="card" href="./demos/derivative-definition/" target="_self">
+      <h3>Derivative: Secant to Tangent</h3>
+      <p>Interactive visualization using JSXGraph to illustrate f'(x) = lim_{h→0} (f(x+h)-f(x))/h.</p>
+    </a>
+  </main>
+
+  <footer>
+    <small>© 2025 Autodiff4Astro • <a href="https://github.com/EiffL/Autodiff4Astro">GitHub</a></small>
+  </footer>
+</body>
+</html>
