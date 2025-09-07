@@ -2,7 +2,13 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, init    // Right board (error plot)
+  // Extra margin on all sides so axis tick labels are fully visible. x-axis spans ε ∈ [1e-14, 2]
+  let errBrd = JXG.JSXGraph.initBoard('err-board', { boundingbox:[-15,1,1,-15], axis:false, showCopyright:false, showNavigation:false, keepaspectratio:false });
+    errBrd.create('grid', [], { strokeColor:'#e6e6e6', strokeWidth:1 });
+    errBrd.create('axis', [[0,0],[1,0]], { strokeColor: COLORS.axis, strokeWidth:2.2, ticks:{ visible:true, ticksDistance:1, minorTicks:1, strokeColor:COLORS.axis, label:{ strokeColor:COLORS.axis, fontSize:14 } } });
+    // Y-axis with proper spacing for tick labels
+    errBrd.create('axis', [[0,0],[0,1]], { strokeColor: COLORS.axis, strokeWidth:2.2, ticks:{ visible:true, ticksDistance:1, minorTicks:1, strokeColor:COLORS.axis, label:{ strokeColor:COLORS.axis, fontSize:14 } } });le=1" />
   <title>Finite Difference Error • Autodiff4Astro</title>
   <meta name="description" content="Visualization of truncation vs round-off error in finite differences." />
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
@@ -123,12 +129,23 @@
   // no readout element; error is shown on the right plot
 
     // Right board (error plot)
-  let errBrd = JXG.JSXGraph.initBoard('err-board', { boundingbox:[-14.2,0.2,0.2,-14.2], axis:false, showCopyright:false, showNavigation:false, keepaspectratio:false });
+  // Extra margin on all sides so axis tick labels are fully visible. x-axis spans ε ∈ [1e-14, 2]
+  let errBrd = JXG.JSXGraph.initBoard('err-board', { boundingbox:[-15,1.5,1,-15], axis:false, showCopyright:false, showNavigation:false, keepaspectratio:false });
     errBrd.create('grid', [], { strokeColor:'#e6e6e6', strokeWidth:1 });
-    errBrd.create('axis', [[0,0],[1,0]], { strokeColor: COLORS.axis, strokeWidth:2.2, ticks:{ visible:true, ticksDistance:1, minorTicks:1, strokeColor:COLORS.axis, label:{ strokeColor:COLORS.axis, fontSize:14 } } });
-    errBrd.create('axis', [[0,0],[0,1]], { strokeColor: COLORS.axis, strokeWidth:2.2, ticks:{ visible:true, ticksDistance:1, minorTicks:1, strokeColor:COLORS.axis, label:{ strokeColor:COLORS.axis, fontSize:14 } } });
-  errBrd.create('text', [-3.5,-6.8,'log10 ε'], { anchorX:'middle', fixed:true, strokeColor:COLORS.axis });
-  errBrd.create('text', [-6.8,-3.5,'log10 |error|'], { anchorY:'middle', fixed:true, rotate:90, strokeColor:COLORS.axis });
+  errBrd.create('axis', [[0,0],[1,0]], { strokeColor: COLORS.axis, strokeWidth:2.2, ticks:{ visible:true, ticksDistance:1, minorTicks:1, strokeColor:COLORS.axis, label:{ strokeColor:COLORS.axis, fontSize:14 } } });
+  // Offset y-axis tick labels to the right so they don't overlap the axis line
+  errBrd.create('axis', [[0,0],[0,1]], { strokeColor: COLORS.axis, strokeWidth:2.2, ticks:{ visible:true, ticksDistance:1, minorTicks:1, strokeColor:COLORS.axis, label:{ strokeColor:COLORS.axis, fontSize:14, offset:[15,0] } } });
+  // Dynamic axis labels placed near the bottom center (x) and left center (y)
+  const xAxisLabel = errBrd.create('text', [
+    () => { const bb=errBrd.getBoundingBox(); return (bb[0]+bb[2])/2; },
+    () => { const bb=errBrd.getBoundingBox(); return bb[3] + 0.25; },
+    'log10 ε'
+  ], { anchorX:'middle', fixed:true, strokeColor:COLORS.axis });
+  const yAxisLabel = errBrd.create('text', [
+    () => { const bb=errBrd.getBoundingBox(); return bb[0] + 0.25; },
+    () => { const bb=errBrd.getBoundingBox(); return (bb[1]+bb[3])/2; },
+    'log10 |error|'
+  ], { anchorY:'middle', fixed:true, rotate:90, strokeColor:COLORS.axis });
   const noDataText = errBrd.create('text', [-3.5,-3.2, 'No data yet — press Scan (A)'], { anchorX:'middle', fixed:true, strokeColor:COLORS.muted || '#5c5c5c' });
   const undefText = errBrd.create('text', [-3.5,-2.2, 'Derivative undefined at x. Choose another x.'], { anchorX:'middle', fixed:true, visible:false, strokeColor:'#b00020' });
     const data = { fwd:{x:[],y:[]}, cen:{x:[],y:[]} };
@@ -162,7 +179,7 @@
   function updateErrorCursor(){
   const eps = Math.max(1e-14, Math.abs(h));
     const xe = lg(eps);
-  const xClamped = Math.max(-14.2, Math.min(0.2, xe));
+  const xClamped = Math.max(-14, Math.min(Math.log10(2), xe));
     epsGlider.moveTo([xClamped, 0], 0);
     const sTrue = df(x0);
     const vis = isFinite(sTrue);
@@ -199,7 +216,7 @@
       clearError();
       const sTrue = df(x0);
       if(!isFinite(sTrue)) { scanning=false; undefText.setAttribute({visible:true}); errBrd.update(); return; }
-  const N=90, minE=1e-14, maxE=1;
+  const N=90, minE=1e-14, maxE=2;
       let i=0;
       function step(){
         if(i>=N){ scanning=false; return; }
