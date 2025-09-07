@@ -228,7 +228,7 @@
       const sTan = df(x0);
       const err = isFinite(sSec) ? Math.abs(sSec - sTan) : NaN;
   readout.innerHTML = `x = ${x0.toFixed(3)} | ε = ${h.toExponential(2)}<br>`+
-        `secant slope ≈ <span style="color:${COLORS.secant}">${(sSec).toFixed(4)}</span>, `+
+        `secant slope ≈ <span style="color:${COLORS.secant}">${(sSec).toFixed(4)}</span><br>`+
         `tangent slope = <span style="color:${COLORS.tangent}">${(sTan).toFixed(4)}</span><br>`+
         `|error| = ${isNaN(err)?'—':err.toExponential(2)}`;
     }
