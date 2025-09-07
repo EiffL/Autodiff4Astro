@@ -24,19 +24,19 @@
       --muted: var(--cnrs-gray);
     }
     *{ box-sizing:border-box }
-    html,body{ height:100%; margin:0; background:transparent; color:var(--text); font:14px/1.5 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica, Arial }
+  html,body{ height:100%; margin:0; background:transparent; color:var(--text); font:21px/1.5 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica, Arial }
     /* Make JSXGraph board background transparent for seamless embedding */
     .jxgbox{ background:transparent !important; }
     .wrap{ display:flex; flex-direction:column; gap:12px; padding:12px; height:100svh; background:transparent }
     header{ display:flex; align-items:center; justify-content:space-between; gap:12px }
-    header h1{ font-size:16px; margin:0 }
+  header h1{ font-size:24px; margin:0 }
     header .hint{ color:var(--muted) }
     .board{ flex:1; min-height:280px; border-radius:8px; overflow:hidden; border:none; background:transparent }
     .controls{ display:grid; gap:8px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); align-items:end }
     .control{ padding:10px; border:1px solid var(--cnrs-gray-light); border-radius:10px; background:transparent }
-    .control label{ display:block; color:var(--muted); font-size:12px; margin-bottom:6px }
+  .control label{ display:block; color:var(--muted); font-size:18px; margin-bottom:6px }
     input[type="range"]{ width:100% }
-    .kbd{ font:12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; background:var(--cnrs-white); color:var(--text); border:1px solid var(--cnrs-gray-light); padding:1px 6px; border-radius:6px }
+  .kbd{ font:18px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; background:var(--cnrs-white); color:var(--text); border:1px solid var(--cnrs-gray-light); padding:1px 6px; border-radius:6px }
     .legend{ display:flex; gap:12px; align-items:center; color:var(--muted) }
     .chip{ display:inline-flex; gap:6px; align-items:center }
     .dot{ width:10px; height:10px; border-radius:50% }
@@ -48,7 +48,7 @@
       <h1>Derivative: secant → tangent</h1>
       <div class="legend">
         <span class="chip"><span class="dot" style="background:#0099cc"></span> f(x)</span>
-        <span class="chip"><span class="dot" style="background:#6841eb"></span> secant slope (Δy/Δx)</span>
+  <span class="chip"><span class="dot" style="background:#6841eb"></span> secant slope (Δy/ε)</span>
         <span class="chip"><span class="dot" style="background:#00274b"></span> tangent slope f'(x)</span>
       </div>
     </header>
@@ -62,6 +62,8 @@
           <option value="sin">f(x) = sin(x)</option>
           <option value="cubic">f(x) = 0.1 x^3 - x</option>
           <option value="gauss">f(x) = exp(-x^2/2)</option>
+          <option value="abs">f(x) = |x| (kink)</option>
+          <option value="kink">f(x) = |x| + 0.2 x^2 (kink)</option>
         </select>
       </div>
       <div class="control">
@@ -69,7 +71,7 @@
         <input id="x-slider" type="range" min="-3.14" max="3.14" step="0.001" value="0.8" />
       </div>
       <div class="control">
-        <label>Δx (secant offset). Tip: press <span class="kbd">A</span> to auto-animate</label>
+  <label>ε (secant offset). Tip: press <span class="kbd">A</span> to auto-animate</label>
         <input id="h-slider" type="range" min="-2" max="2" step="0.0005" value="1.2" />
       </div>
       <div class="control">
@@ -99,6 +101,18 @@
         f: x => Math.exp(-0.5*x*x),
         df: x => -x*Math.exp(-0.5*x*x),
         view: [-3.5, 3.5, -0.2, 1.5],
+        tick: 1
+      };
+      if(kind==='abs') return {
+        f: x => Math.abs(x),
+        df: x => (x < 0 ? -1 : x > 0 ? 1 : NaN), // undefined at 0
+        view: [-3, 3, -0.5, 3],
+        tick: 1
+      };
+      if(kind==='kink') return {
+        f: x => Math.abs(x) + 0.2*x*x,
+        df: x => (x < 0 ? -1 + 0.4*x : x > 0 ? 1 + 0.4*x : NaN), // undefined at 0
+        view: [-3, 3, -0.5, 4],
         tick: 1
       };
       return makeFns('sin');
@@ -148,8 +162,15 @@
   // Secant line through A and B
   let secant = brd.create('line', [A, B], { strokeColor:COLORS.secant, strokeWidth:2 });
 
-  // Tangent at A
-  let tangent = brd.create('tangent', [A], { strokeColor:COLORS.tangent, strokeWidth:2 });
+  // Tangent at A (custom): hide when derivative is undefined (e.g., kink)
+  let tangent = brd.create('line', [
+    () => [A.X(), f(A.X())],
+    () => {
+      const s = df(A.X());
+      const dx = 1; // step on x for direction
+      return [A.X()+dx, f(A.X()) + (isFinite(s) ? s*dx : 0)];
+    }
+  ], { strokeColor:COLORS.tangent, strokeWidth:2, visible: () => isFinite(df(A.X())) });
 
   // Visual delta x and delta y segment
   let dxSeg = brd.create('segment', [[() => A.X(), () => f(A.X())], [() => B.X(), () => f(A.X())]], { strokeColor:COLORS.seg, dash:2 });
@@ -204,7 +225,7 @@
       const sSec = isFinite(h) && Math.abs(h) > 1e-12 ? slopeSecant() : NaN;
       const sTan = df(x0);
       const err = isFinite(sSec) ? Math.abs(sSec - sTan) : NaN;
-      readout.innerHTML = `x = ${x0.toFixed(3)} | Δx = ${h.toExponential(2)}<br>`+
+  readout.innerHTML = `x = ${x0.toFixed(3)} | ε = ${h.toExponential(2)}<br>`+
         `secant slope ≈ <span style="color:${COLORS.secant}">${(sSec).toFixed(4)}</span>, `+
         `tangent slope = <span style="color:${COLORS.tangent}">${(sTan).toFixed(4)}</span><br>`+
         `|error| = ${isNaN(err)?'—':err.toExponential(2)}`;
@@ -228,7 +249,15 @@
   A = brd.create('glider', [x0, f(x0), curve], {withLabel:false, strokeColor:COLORS.fx, fillColor:COLORS.fx});
   B = brd.create('point', [() => A.X()+h, () => f(A.X()+h)], {withLabel:false, strokeColor:COLORS.secant, fillColor:COLORS.secant});
   secant = brd.create('line', [A, B], { strokeColor:COLORS.secant, strokeWidth:2 });
-  tangent = brd.create('tangent', [A], { strokeColor:COLORS.tangent, strokeWidth:2 });
+  // Recreate tangent with custom visibility
+  tangent = brd.create('line', [
+    () => [A.X(), f(A.X())],
+    () => {
+      const s = df(A.X());
+      const dx = 1;
+      return [A.X()+dx, f(A.X()) + (isFinite(s) ? s*dx : 0)];
+    }
+  ], { strokeColor:COLORS.tangent, strokeWidth:2, visible: () => isFinite(df(A.X())) });
   dxSeg = brd.create('segment', [[() => A.X(), () => f(A.X())], [() => B.X(), () => f(A.X())]], { strokeColor:COLORS.seg, dash:2 });
   dySeg = brd.create('segment', [[() => B.X(), () => f(A.X())], [() => B.X(), () => f(B.X())]], { strokeColor:COLORS.seg, dash:2 });
       // Rebind drag behavior
