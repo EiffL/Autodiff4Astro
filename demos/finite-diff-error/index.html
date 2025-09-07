@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Finite Difference Error • Autodiff4Astro</title>
+  <meta name="description" content="Visualization of truncation vs round-off error in finite differences." />
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jsxgraph/distrib/jsxgraph.css">
+  <script src="https://cdn.jsdelivr.net/npm/jsxgraph/distrib/jsxgraphcore.js"></script>
+  <style>
+    :root{
+      --cnrs-blue: #00274b; --cnrs-cyan: #0099cc; --cnrs-gray: #5c5c5c; --cnrs-gray-light: #999999; --cnrs-purple: #6841eb; --cnrs-white: #ffffff;
+      --text: var(--cnrs-blue); --muted: var(--cnrs-gray);
+    }
+    *{ box-sizing:border-box }
+    html,body{ height:100%; margin:0; background:transparent; color:var(--text); font:21px/1.5 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu }
+    .jxgbox{ background:transparent !important }
+    .wrap{ display:grid; grid-template-columns: 1.1fr 0.9fr; gap:12px; padding:12px; height:100svh }
+    .panel{ display:flex; flex-direction:column; gap:8px }
+    .board{ flex:1; border:none; border-radius:8px; min-height:280px }
+    .controls{ display:grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); gap:8px }
+    .control{ border:1px solid var(--cnrs-gray-light); border-radius:10px; padding:10px; background:transparent }
+    .control label{ display:block; color:var(--muted); font-size:18px; margin-bottom:6px }
+    input[type="range"]{ width:100% }
+    .legend{ display:flex; gap:12px; align-items:center; color:var(--muted) }
+    .chip{ display:inline-flex; align-items:center; gap:6px }
+    .dot{ width:10px; height:10px; border-radius:50% }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="panel">
+      <div class="legend">
+        <span class="chip"><span class="dot" style="background:#0099cc"></span> f(x)</span>
+        <span class="chip"><span class="dot" style="background:#6841eb"></span> secant slope (Δy/ε)</span>
+        <span class="chip"><span class="dot" style="background:#00274b"></span> tangent slope f'(x)</span>
+      </div>
+      <div id="vis-board" class="board"></div>
+      <div class="controls">
+        <div class="control">
+          <label for="fn-select">Function f(x)</label>
+          <select id="fn-select">
+            <option value="sin">f(x) = sin(x)</option>
+            <option value="cubic">f(x) = 0.1 x^3 - x</option>
+            <option value="gauss">f(x) = exp(-x^2/2)</option>
+            <option value="abs">f(x) = |x| (kink)</option>
+            <option value="kink">f(x) = |x| + 0.2 x^2 (kink)</option>
+          </select>
+        </div>
+        <div class="control">
+          <label>Point x</label>
+          <input id="x-slider" type="range" min="-3.14" max="3.14" step="0.001" value="0.8" />
+        </div>
+        <div class="control">
+          <label>ε (offset). Press A to animate/scan</label>
+          <input id="h-slider" type="range" min="-2" max="2" step="0.0005" value="1.2" />
+        </div>
+        <div class="control">
+          <label>Readout</label>
+          <div id="readout"></div>
+        </div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="legend">
+        <span class="chip"><span class="dot" style="background:#6841eb"></span> Forward diff error</span>
+        <span class="chip"><span class="dot" style="background:#0099cc"></span> Central diff error</span>
+      </div>
+      <div id="err-board" class="board"></div>
+      <div class="controls">
+        <div class="control">
+          <button id="scan-btn" style="font-size:18px; padding:8px 12px; border-radius:8px; border:1px solid var(--cnrs-gray-light); background:transparent; color:var(--text)">Scan errors (A)</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (function(){
+    // Safe base-10 log helper for wide browser support
+    const lg = (x) => Math.log(x) / Math.LN10;
+    function makeFns(kind){
+      if(kind==='sin') return { f:x=>Math.sin(x), df:x=>Math.cos(x), view:[-4,4,-2.2,2.2], tick:Math.PI/2 };
+      if(kind==='cubic') return { f:x=>0.1*x*x*x - x, df:x=>0.3*x*x - 1, view:[-4,4,-4,4], tick:1 };
+      if(kind==='gauss') return { f:x=>Math.exp(-0.5*x*x), df:x=>-x*Math.exp(-0.5*x*x), view:[-3.5,3.5,-0.2,1.5], tick:1 };
+      if(kind==='abs') return { f:x=>Math.abs(x), df:x=> (x<0?-1:x>0?1:NaN), view:[-3,3,-0.5,3], tick:1 };
+      if(kind==='kink') return { f:x=>Math.abs(x)+0.2*x*x, df:x=> (x<0?-1+0.4*x:x>0?1+0.4*x:NaN), view:[-3,3,-0.5,4], tick:1 };
+      return makeFns('sin');
+    }
+
+    const visDiv = document.getElementById('vis-board');
+    const errDiv = document.getElementById('err-board');
+    const select = document.getElementById('fn-select');
+    const xSlider = document.getElementById('x-slider');
+    const hSlider = document.getElementById('h-slider');
+    const readout = document.getElementById('readout');
+
+    let kind = select.value;
+    let { f, df, view, tick } = makeFns(kind);
+    let x0 = parseFloat(xSlider.value);
+    let h = parseFloat(hSlider.value);
+    let animId = null, scanId = null;
+
+    const COLORS = { fx:'#0099cc', secant:'#6841eb', tangent:'#00274b', seg:'#6841eb', axis:'#5c5c5c' };
+
+    // Left board (function)
+    let brd = JXG.JSXGraph.initBoard('vis-board', { boundingbox:[view[0],view[3],view[1],view[2]], axis:false, showCopyright:false, showNavigation:false, keepaspectratio:false });
+    brd.create('axis', [[0,0],[1,0]], { strokeColor: COLORS.axis, ticks:{ visible:true, ticksDistance: tick, minorTicks:1, strokeColor:COLORS.axis, label:{ strokeColor:COLORS.axis } } });
+    brd.create('axis', [[0,0],[0,1]], { strokeColor: COLORS.axis, ticks:{ visible:true, ticksDistance: tick, minorTicks:1, strokeColor:COLORS.axis, label:{ strokeColor:COLORS.axis } } });
+    let curve = brd.create('functiongraph', [f, view[0], view[1]], { strokeColor: COLORS.fx, strokeWidth:3 });
+    let A = brd.create('glider', [x0, f(x0), curve], {withLabel:false, strokeColor:COLORS.fx, fillColor:COLORS.fx});
+    let B = brd.create('point', [() => A.X()+h, () => f(A.X()+h)], {withLabel:false, strokeColor:COLORS.secant, fillColor:COLORS.secant});
+    let secant = brd.create('line', [A, B], { strokeColor:COLORS.secant, strokeWidth:2 });
+    let tangent = brd.create('line', [() => [A.X(), f(A.X())], () => { const s=df(A.X()); const dx=1; return [A.X()+dx, f(A.X()) + (isFinite(s)? s*dx : 0)]; }], { strokeColor:COLORS.tangent, strokeWidth:2, visible: () => isFinite(df(A.X())) });
+    let dxSeg = brd.create('segment', [[() => A.X(), () => f(A.X())], [() => B.X(), () => f(A.X())]], { strokeColor:COLORS.seg, dash:2 });
+    let dySeg = brd.create('segment', [[() => B.X(), () => f(A.X())], [() => B.X(), () => f(B.X())]], { strokeColor:COLORS.seg, dash:2 });
+
+    function setX(val){ x0 = val; if(A) A.moveTo([x0, f(x0)]); brd.update(); updateReadout(); clearError(); }
+    function setH(val){ h = val; brd.update(); updateReadout(); }
+
+    function syncXRange(){ xSlider.min=view[0]; xSlider.max=view[1]; if(x0<view[0]) x0=view[0]; if(x0>view[1]) x0=view[1]; xSlider.value=x0; }
+    xSlider.addEventListener('input', e=> setX(parseFloat(e.target.value)) );
+    hSlider.addEventListener('input', e=> setH(parseFloat(e.target.value)) );
+    A.on('drag', ()=> { xSlider.value = A.X().toFixed(3); setX(A.X()); });
+
+    function slopeSecant(){ return (f(x0+h)-f(x0))/h; }
+    function updateReadout(){
+      const sSec = isFinite(h) && Math.abs(h) > 1e-12 ? slopeSecant() : NaN;
+      const sTan = df(x0);
+      const err = isFinite(sSec) && isFinite(sTan) ? Math.abs(sSec - sTan) : NaN;
+      readout.innerHTML = `x=${x0.toFixed(3)} | ε=${h.toExponential(2)}<br>`+
+        `sec ≈ <span style="color:${COLORS.secant}">${isFinite(sSec)?sSec.toFixed(4):'—'}</span>, `+
+        `tan = <span style="color:${COLORS.tangent}">${isFinite(sTan)?sTan.toFixed(4):'—'}</span><br>`+
+        `|error| = ${isFinite(err)?err.toExponential(2):'—'}`;
+    }
+
+    // Right board (error plot)
+  let errBrd = JXG.JSXGraph.initBoard('err-board', { boundingbox:[-16,0,-1,-16], axis:false, showCopyright:false, showNavigation:false, keepaspectratio:false });
+    errBrd.create('axis', [[0,0],[1,0]], { strokeColor: COLORS.axis, ticks:{ visible:true, ticksDistance:2, minorTicks:1, strokeColor:COLORS.axis, label:{ strokeColor:COLORS.axis } } });
+    errBrd.create('axis', [[0,0],[0,1]], { strokeColor: COLORS.axis, ticks:{ visible:true, ticksDistance:2, minorTicks:1, strokeColor:COLORS.axis, label:{ strokeColor:COLORS.axis } } });
+  errBrd.create('text', [-8.5,-15.2,'log10 ε'], { anchorX:'middle', fixed:true, strokeColor:COLORS.axis });
+  errBrd.create('text', [-15.2,-8.5,'log10 |error|'], { anchorY:'middle', fixed:true, rotate:90, strokeColor:COLORS.axis });
+  const noDataText = errBrd.create('text', [-8.5,-8, 'No data yet — press Scan (A)'], { anchorX:'middle', fixed:true, strokeColor:COLORS.muted || '#5c5c5c' });
+  const undefText = errBrd.create('text', [-8.5,-6.5, 'Derivative undefined at x. Choose another x.'], { anchorX:'middle', fixed:true, visible:false, strokeColor:'#b00020' });
+    const data = { fwd:{x:[],y:[]}, cen:{x:[],y:[]} };
+  const curveFwd = errBrd.create('curve', [[], []], { strokeColor:COLORS.secant, strokeWidth:3 });
+  const curveCen = errBrd.create('curve', [[], []], { strokeColor:COLORS.fx, strokeWidth:3 });
+  // Explicitly bind the curve data to our arrays to ensure updates render
+  curveFwd.updateDataArray = function(){ this.dataX = data.fwd.x; this.dataY = data.fwd.y; };
+  curveCen.updateDataArray = function(){ this.dataX = data.cen.x; this.dataY = data.cen.y; };
+
+    function clearError(){
+      data.fwd.x.length=0; data.fwd.y.length=0; data.cen.x.length=0; data.cen.y.length=0;
+      noDataText.setAttribute({visible:true});
+      undefText.setAttribute({visible:false});
+      errBrd.update();
+    }
+
+    // Scanning ε on 'A'
+    let scanning=false;
+  window.addEventListener('keydown', (e)=>{ if(e.key && e.key.toLowerCase()==='a'){ e.preventDefault(); toggleAnim(); if(!scanning){ scanning=true; scanErrors(); } } });
+  const scanBtn = document.getElementById('scan-btn');
+  scanBtn.addEventListener('click', ()=>{ if(!scanning){ scanning=true; scanErrors(); } });
+
+    function scanErrors(){
+      clearError();
+      const sTrue = df(x0);
+      if(!isFinite(sTrue)) { scanning=false; undefText.setAttribute({visible:true}); errBrd.update(); return; }
+      const N=90, minE=1e-15, maxE=1e-1;
+      let i=0;
+      function step(){
+        if(i>=N){ scanning=false; return; }
+        const t=i/(N-1);
+        const eps = minE*Math.pow(maxE/minE, t);
+        const xe = lg(eps);
+        // forward
+        const sF = (f(x0+eps)-f(x0))/eps; const eF = Math.max(1e-20, Math.abs(sF - sTrue));
+        data.fwd.x.push(xe); data.fwd.y.push(lg(eF));
+        // central
+        const sC = (f(x0+eps)-f(x0-eps))/(2*eps); const eC = Math.max(1e-20, Math.abs(sC - sTrue));
+  data.cen.x.push(xe); data.cen.y.push(lg(eC));
+  noDataText.setAttribute({visible:false});
+  // Refresh curve data before updating board
+  if(curveFwd.updateDataArray) curveFwd.updateDataArray();
+  if(curveCen.updateDataArray) curveCen.updateDataArray();
+  errBrd.update();
+        i++; requestAnimationFrame(step);
+      }
+      requestAnimationFrame(step);
+    }
+
+    function toggleAnim(){
+      if(animId){ cancelAnimationFrame(animId); animId=null; return; }
+      const speed=0.98; const sign = h>=0?1:-1;
+      function step(){ h = (Math.abs(h)<1e-4)? 1.5*sign : h*speed; hSlider.value=h; brd.update(); updateReadout(); animId=requestAnimationFrame(step); }
+      animId=requestAnimationFrame(step);
+    }
+
+    select.addEventListener('change', (e)=>{ kind=e.target.value; ({f,df,view,tick}=makeFns(kind)); syncXRange(); JXG.JSXGraph.freeBoard(brd);
+      brd = JXG.JSXGraph.initBoard('vis-board', { boundingbox:[view[0],view[3],view[1],view[2]], axis:false, showCopyright:false, showNavigation:false, keepaspectratio:false });
+      brd.create('axis', [[0,0],[1,0]], { strokeColor: COLORS.axis, ticks:{ visible:true, ticksDistance: tick, minorTicks:1, strokeColor:COLORS.axis, label:{ strokeColor:COLORS.axis } } });
+      brd.create('axis', [[0,0],[0,1]], { strokeColor: COLORS.axis, ticks:{ visible:true, ticksDistance: tick, minorTicks:1, strokeColor:COLORS.axis, label:{ strokeColor:COLORS.axis } } });
+      curve = brd.create('functiongraph', [f, view[0], view[1]], { strokeColor: COLORS.fx, strokeWidth:3 });
+      A = brd.create('glider', [x0, f(x0), curve], {withLabel:false, strokeColor:COLORS.fx, fillColor:COLORS.fx});
+      B = brd.create('point', [() => A.X()+h, () => f(A.X()+h)], {withLabel:false, strokeColor:COLORS.secant, fillColor:COLORS.secant});
+      secant = brd.create('line', [A, B], { strokeColor:COLORS.secant, strokeWidth:2 });
+      tangent = brd.create('line', [() => [A.X(), f(A.X())], () => { const s=df(A.X()); const dx=1; return [A.X()+dx, f(A.X()) + (isFinite(s)? s*dx : 0)]; }], { strokeColor:COLORS.tangent, strokeWidth:2, visible: () => isFinite(df(A.X())) });
+      dxSeg = brd.create('segment', [[() => A.X(), () => f(A.X())], [() => B.X(), () => f(A.X())]], { strokeColor:COLORS.seg, dash:2 });
+      dySeg = brd.create('segment', [[() => B.X(), () => f(A.X())], [() => B.X(), () => f(B.X())]], { strokeColor:COLORS.seg, dash:2 });
+      A.on('drag', ()=> { xSlider.value = A.X().toFixed(3); setX(A.X()); });
+      updateReadout(); clearError();
+    });
+
+    syncXRange(); updateReadout();
+  })();
+  </script>
+</body>
+</html>
